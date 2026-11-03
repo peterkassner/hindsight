@@ -77,6 +77,7 @@ from .settings import (
     _repository_root,
     _resolve_bank_id_template,
     _template_fields,
+    _workspace_bank_id,
 )
 
 logger = logging.getLogger(__name__)
@@ -1341,7 +1342,7 @@ class HindsightMemoryProvider(MemoryProvider):
             self._prefetch_method,
             client_version,
         )
-        if self._bank_id_template or self._bank_source == "repository config":
+        if self._bank_id_template or self._bank_source in {"repository config", "workspace route"}:
             logger.debug(
                 "Hindsight bank %s from %s (template %r: profile=%s workspace=%s project=%s platform=%s user=%s, cwd=%s)",
                 self._bank_id,
@@ -1468,8 +1469,9 @@ class HindsightMemoryProvider(MemoryProvider):
         self._static_bank_id = (
             get_secret("HINDSIGHT_BANK_ID", "") or cfg.get("bank_id") or banks.get("bankId") or "hermes"
         )
-        # Precedence: closest .hindsight/config.toml in a trusted repository → template → static bank_id.
+        # Precedence: centralized workspace route → trusted repository config → template → static bank_id.
         # The repository is only looked up when something needs it, and only once.
+        workspace_bank = _workspace_bank_id(self._cwd, cfg.get("workspace_bank_routes"))
         trusted_dirs = _normalize_string_list(cfg.get("trusted_project_dirs"))
         uses_project = "project" in _template_fields(self._bank_id_template)
         root, cwd_bank, self._project = None, None, ""
@@ -1485,7 +1487,9 @@ class HindsightMemoryProvider(MemoryProvider):
                 self._project = _project_name(root)
             except Exception as exc:
                 logger.warning("hindsight: cannot name the project at %s: %r — {project} is empty", root, exc)
-        if cwd_bank:
+        if workspace_bank:
+            self._bank_id, self._bank_source = workspace_bank, "workspace route"
+        elif cwd_bank:
             self._bank_id, self._bank_source = cwd_bank, "repository config"
         else:
             self._bank_id = self._resolve_template_bank()

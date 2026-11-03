@@ -108,6 +108,59 @@ def _normalize_string_list(value: Any) -> List[str]:
     return normalized
 
 
+def _normalize_workspace_bank_routes(value: Any) -> list[tuple[Path, str]]:
+    """Normalize centralized absolute-path-to-bank routing entries.
+
+    Accepts a mapping or a JSON object string and returns deepest paths first so
+    the nearest matching ancestor wins.
+    """
+    if value is None or value == "":
+        return []
+    if isinstance(value, str):
+        try:
+            value = json.loads(value)
+        except ValueError:
+            logger.warning("Invalid workspace_bank_routes %r (not valid JSON); no routes applied", value)
+            return []
+    if not isinstance(value, dict):
+        logger.warning("Invalid workspace_bank_routes %r (expected an object); no routes applied", value)
+        return []
+
+    routes: list[tuple[Path, str]] = []
+    for raw_path, raw_bank in value.items():
+        path_text = str(raw_path).strip()
+        bank_id = str(raw_bank).strip()
+        path = Path(path_text).expanduser()
+        if not path_text or not path.is_absolute() or not bank_id:
+            logger.warning(
+                "Ignoring workspace_bank_routes entry %r=%r: path must be absolute and bank non-empty",
+                raw_path,
+                raw_bank,
+            )
+            continue
+        try:
+            resolved_path = path.resolve()
+        except (OSError, RuntimeError) as exc:
+            logger.warning("Ignoring workspace_bank_routes path %r: cannot resolve it: %r", raw_path, exc)
+            continue
+        routes.append((resolved_path, bank_id))
+    return sorted(routes, key=lambda item: len(item[0].parts), reverse=True)
+
+
+def _workspace_bank_id(cwd: str, value: Any) -> str | None:
+    """Return the bank for the nearest configured ancestor of *cwd*."""
+    if not cwd:
+        return None
+    try:
+        current = Path(cwd).expanduser().resolve()
+    except (OSError, RuntimeError):
+        return None
+    for route_root, bank_id in _normalize_workspace_bank_routes(value):
+        if current == route_root or route_root in current.parents:
+            return bank_id
+    return None
+
+
 def _normalize_min_scores(value: Any) -> dict[str, float] | None:
     """Normalize ``recall_min_scores`` to ``{score_name: floor}``, or ``None`` for no floor.
 

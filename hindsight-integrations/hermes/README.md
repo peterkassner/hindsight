@@ -230,13 +230,27 @@ Some keys also accept an older name: `apiKey` for `api_key`, `budget` for `recal
 | `mirror_to_own_bank` | `false` | Also write to `bank_id` when the template resolves to a different bank, so a profile keeps its own memory while working in project banks. |
 | `additional_banks` | — | Extra banks to write to and recall from, in priority order. |
 | `recall_additional_banks` | — | Extra banks to recall from but never write to, searched after the write banks. Alias `recallAdditionalBanks`, the name the Claude Code integration uses. A bank also listed in `additional_banks` stays writable. |
+| `workspace_bank_routes` | — | Central absolute-path-to-bank mapping. Accepts a JSON object whose keys are workspace folders and values are bank IDs. The nearest matching parent path wins. |
 | `trusted_project_dirs` | — | Absolute folders whose git repositories may choose their own bank with a `.hindsight/config.toml`. Empty by default, so a cloned repository cannot redirect your memory. |
 | `bank_mission` | — | Read but not applied to the bank. To set a bank's reflect mission, use the bank's config (control plane or `PATCH /v1/default/banks/{bank_id}/config`). |
 | `bank_retain_mission` | — | Read but not applied to the bank. To set a bank's retain mission, use the bank's config, as above. |
 
 #### Multiple banks
 
-The primary bank is chosen in this order: a `.hindsight/config.toml` in a trusted repository, then `bank_id_template`, then `HINDSIGHT_BANK_ID` or `bank_id`. Writes go to the primary, then `bank_id` when `mirror_to_own_bank` is on, then each `additional_banks` entry. Recall searches the same banks and then each `recall_additional_banks` entry, all at once, each with the configured budget and `recall_max_tokens`; results are merged in that order and deduplicated by text. Reflect uses the primary bank only.
+The primary bank is chosen in this order: `workspace_bank_routes`, a `.hindsight/config.toml` in a trusted repository, `bank_id_template`, then `HINDSIGHT_BANK_ID` or `bank_id`. Writes go to the primary, then `bank_id` when `mirror_to_own_bank` is on, then each `additional_banks` entry. Recall searches the same banks and then each `recall_additional_banks` entry, all at once, each with the configured budget and `recall_max_tokens`; results are merged in that order and deduplicated by text. Reflect uses the primary bank only.
+
+For centralized routing, set `workspace_bank_routes` in the Hindsight profile configuration:
+
+```json
+{
+  "workspace_bank_routes": {
+    "/Users/me/work": "general-work",
+    "/Users/me/work/acme": "acme"
+  }
+}
+```
+
+When Hermes runs in `/Users/me/work/acme/api`, it selects `acme`; elsewhere under `/Users/me/work`, it selects `general-work`. Routes are local profile settings, so repositories do not need to track routing files.
 
 The three list settings take a JSON list or comma-separated text; use the JSON form for a value that contains a comma.
 

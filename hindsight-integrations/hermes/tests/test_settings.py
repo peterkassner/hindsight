@@ -1,14 +1,18 @@
 """Pure config normalizers — no Hermes, no network."""
 
 import types
+from pathlib import Path
+from unittest.mock import patch
 
 from hindsight_hermes.settings import (
     _clears_min_scores,
     _normalize_min_scores,
     _normalize_observation_scopes,
     _normalize_string_list,
+    _normalize_workspace_bank_routes,
     _parse_int_setting,
     _resolve_bank_id_template,
+    _workspace_bank_id,
 )
 
 
@@ -17,6 +21,41 @@ def test_retain_tags_accepts_csv_json_and_lists():
     assert _normalize_string_list('["a", "b"]') == ["a", "b"]
     assert _normalize_string_list(["a", "a", "b"]) == ["a", "b"]
     assert _normalize_string_list(None) == []
+
+
+def test_workspace_bank_routes_accepts_mapping_and_json(tmp_path: Path):
+    root = tmp_path / "work"
+    routes = _normalize_workspace_bank_routes({str(root): "work-bank"})
+    assert routes == [(root.resolve(), "work-bank")]
+    assert _normalize_workspace_bank_routes(f'{{"{root}": "work-bank"}}') == routes
+
+
+def test_workspace_bank_routes_rejects_invalid_entries(tmp_path: Path):
+    assert _normalize_workspace_bank_routes("not-json") == []
+    assert _normalize_workspace_bank_routes(["not", "a", "mapping"]) == []
+    assert _normalize_workspace_bank_routes({"relative/path": "bank"}) == []
+    assert _normalize_workspace_bank_routes({str(tmp_path): ""}) == []
+
+
+def test_workspace_bank_routes_ignores_unresolvable_paths(tmp_path: Path):
+    with patch.object(Path, "resolve", side_effect=RuntimeError("symlink loop")):
+        assert _normalize_workspace_bank_routes({str(tmp_path): "bank"}) == []
+
+
+def test_workspace_bank_route_uses_nearest_ancestor(tmp_path: Path):
+    root = tmp_path / "work"
+    nested = root / "project"
+    cwd = nested / "src"
+    cwd.mkdir(parents=True)
+    routes = {str(root): "parent-bank", str(nested): "project-bank"}
+    assert _workspace_bank_id(str(cwd), routes) == "project-bank"
+
+
+def test_workspace_bank_route_matches_path_components_not_prefixes(tmp_path: Path):
+    route = tmp_path / "work"
+    sibling = tmp_path / "worktree"
+    sibling.mkdir()
+    assert _workspace_bank_id(str(sibling), {str(route): "wrong-bank"}) is None
 
 
 def test_parse_int_setting_falls_back_on_garbage():

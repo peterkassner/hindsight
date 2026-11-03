@@ -91,6 +91,21 @@ def test_provider_uses_trusted_repository_config_over_the_template(tmp_path: Pat
     assert provider._bank_id == "project-x-bank"
 
 
+def test_provider_uses_workspace_route_over_repository_config_and_template(tmp_path: Path):
+    sub = _repo_with_config(tmp_path / "work" / "project_x", "repository-bank")
+    config = {
+        "bank_id": "hermes",
+        "bank_id_template": "hermes-{project}",
+        "trusted_project_dirs": str(tmp_path / "work"),
+        "workspace_bank_routes": {str(tmp_path / "work"): "workspace-bank"},
+    }
+    provider = HindsightMemoryProvider()
+    with patch.object(plugin, "_load_config", return_value=config):
+        provider.initialize(session_id="s1", cwd=str(sub))
+    assert provider._bank_id == "workspace-bank"
+    assert provider._bank_source == "workspace route"
+
+
 def _bank_for(cwd: str, template: str, **session) -> str:
     provider = HindsightMemoryProvider()
     with patch.object(plugin, "_load_config", return_value={"bank_id": "hermes", "bank_id_template": template}):

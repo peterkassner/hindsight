@@ -75,6 +75,14 @@ CONFIG_SCHEMA = ProviderConfigSchema(
             description="Extra Hindsight banks to recall from but never write to, searched after the write banks (comma-separated). A bank also in Additional banks stays writable.",
         ),
         ProviderField(
+            key="workspace_bank_routes",
+            label="Workspace bank routes",
+            kind=KIND_TEXT,
+            default="",
+            inline=False,
+            description='Central absolute-path-to-bank mapping as JSON, for example {"/work/project": "project-bank"}. The nearest matching parent path wins.',
+        ),
+        ProviderField(
             key="trusted_project_dirs",
             label="Trusted project folders",
             kind=KIND_TEXT,
